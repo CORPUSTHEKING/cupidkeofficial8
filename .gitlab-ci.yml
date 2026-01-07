@@ -6,4 +6,9 @@ stages:
 bootstrap:
   stage: bootstrap
   script:
+    - set -e
+    - node --version
+    - npm --version
+    - pwd
+    - ls -lah
     - npm ci
