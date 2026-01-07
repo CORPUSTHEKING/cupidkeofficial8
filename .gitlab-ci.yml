@@ -2,6 +2,7 @@ image: node:18
 
 stages:
   - bootstrap
+  - build
 
 bootstrap:
   stage: bootstrap
@@ -9,6 +10,15 @@ bootstrap:
     - set -e
     - node --version
     - npm --version
+    - pwd
+    - ls -lah
+    - npm ci
+
+build:server:
+  stage: build
+  script:
+    - set -e
+    - cd server
     - pwd
     - ls -lah
     - npm ci
