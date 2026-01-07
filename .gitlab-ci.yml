@@ -1,12 +1,13 @@
 image: node:18
 
 stages:
-  - sanity
+  - bootstrap
 
-  sanity:
-    stage: sanity
-      script:
-          - node --version
-              - npm --version
-                  - pwd
-                      - ls -lah
+bootstrap:
+  stage: bootstrap
+  script:
+    - node --version
+    - npm --version
+    - pwd
+    - ls -lah
+    - npm ci
