@@ -1,0 +1,35 @@
+image: node:18
+
+stages:
+  - bootstrap
+  - lint
+  - build
+
+bootstrap:
+  stage: bootstrap
+  script:
+    - set -e
+    - node --version
+    - npm --version
+    - pwd
+    - ls -lah
+    - npm ci
+
+lint:server:
+  stage: lint
+  script:
+    - set -e
+    - cd server
+    - pwd
+    - ls -lah
+    - npm ci
+    - npm run lint
+
+build:server:
+  stage: build
+  script:
+    - set -e
+    - cd server
+    - pwd
+    - ls -lah
+    - npm ci
