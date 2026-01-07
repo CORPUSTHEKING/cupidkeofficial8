@@ -1,0 +1,12 @@
+image: node:18
+
+stages:
+  - sanity
+
+  sanity:
+    stage: sanity
+      script:
+          - node --version
+              - npm --version
+                  - pwd
+                      - ls -lah
