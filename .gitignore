@@ -15,3 +15,4 @@ pgdata
 # server images (except default)
 server/images/*
 !server/images/default_profilepic.jpeg
+.telegram_bot.pid

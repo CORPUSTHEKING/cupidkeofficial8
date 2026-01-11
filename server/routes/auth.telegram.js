@@ -1,134 +1,73 @@
-'use strict';
-
-const crypto = require('crypto');
 const express = require('express');
 const router = express.Router();
-const pool = require('../db');
 
-/**
- * Verify Telegram Mini App initData
- * https://core.telegram.org/bots/webapps#validating-data-received-via-the-web-app
- */
-function verifyTelegramInitData(initData, botToken) {
-  const params = new URLSearchParams(initData);
-  const hash = params.get('hash');
-  params.delete('hash');
+const { verifyTelegramInitData } = require('../telegram/verify');
+const db = require('../db');
 
-  const dataCheckString = [...params.entries()]
-    .sort(([a], [b]) => a.localeCompare(b))
-    .map(([k, v]) => `${k}=${v}`)
-    .join('\n');
-
-  const secretKey = crypto
-    .createHash('sha256')
-    .update(botToken)
-    .digest();
-
-  const computedHash = crypto
-    .createHmac('sha256', secretKey)
-    .update(dataCheckString)
-    .digest('hex');
-
-  return crypto.timingSafeEqual(
-    Buffer.from(hash),
-    Buffer.from(computedHash)
-  );
-}
-
-/**
- * POST /auth/telegram
- */
-router.post('/telegram', async (req, res) => {
+router.post('/telegram/init', async (req, res) => {
   const { initData } = req.body;
+  const botToken = process.env.TELEGRAM_BOT_TOKEN;
 
   if (!initData) {
-    return res.status(400).json({ error: 'initData missing' });
+    return res.status(400).json({ error: 'Missing initData' });
   }
 
-  const BOT_TOKEN = process.env.TELEGRAM_BOT_TOKEN;
-  if (!BOT_TOKEN) {
-    console.error('[telegram] BOT TOKEN NOT SET');
-    return res.status(500).json({ error: 'server misconfigured' });
+  const result = verifyTelegramInitData(initData, botToken);
+
+  if (!result.valid || !result.telegram_id) {
+    return res.status(401).json({ error: 'Invalid Telegram auth data' });
   }
 
-  if (!verifyTelegramInitData(initData, BOT_TOKEN)) {
-    return res.status(401).json({ error: 'invalid telegram signature' });
-  }
+  const {
+    telegram_id,
+    username,
+    first_name,
+    last_name,
+  } = result;
 
-  const data = Object.fromEntries(new URLSearchParams(initData));
-  const telegramId = Number(data.id);
+  const client = await db.connect();
 
   try {
-    // Resolve existing Telegram user
-    const { rows } = await pool.query(
-      `
-      SELECT u.id
-      FROM telegram_users t
-      JOIN users u ON u.id = t.user_id
-      WHERE t.telegram_id = $1
-      `,
-      [telegramId]
+    await client.query('BEGIN');
+
+    // ensure cupidke user
+    const userRes = await client.query(
+      `INSERT INTO users (email)
+       VALUES ($1)
+       ON CONFLICT (email) DO UPDATE SET email = EXCLUDED.email
+       RETURNING id`,
+      [`telegram:${telegram_id}`]
     );
 
-    if (rows.length) {
-      return res.json({
-        ok: true,
-        user_id: rows[0].id,
-        telegram: true
-      });
-    }
+    const userId = userRes.rows[0].id;
 
-    // Create bare user + telegram binding
-    const userResult = await pool.query(
-      `
-      INSERT INTO users (username, firstname, lastname, email, password)
-      VALUES ($1, $2, $3, $4, 'telegram-auth')
-      RETURNING id
-      `,
-      [
-        `tg_${telegramId}`,
-        data.first_name || 'Telegram',
-        data.last_name || 'User',
-        `tg_${telegramId}@telegram.local`
-      ]
+    // ensure telegram identity
+    await client.query(
+      `INSERT INTO telegram_identities
+       (telegram_id, username, first_name, last_name, user_id)
+       VALUES ($1, $2, $3, $4, $5)
+       ON CONFLICT (telegram_id)
+       DO UPDATE SET
+         username = EXCLUDED.username,
+         first_name = EXCLUDED.first_name,
+         last_name = EXCLUDED.last_name,
+         user_id = EXCLUDED.user_id`,
+      [telegram_id, username, first_name, last_name, userId]
     );
 
-    const userId = userResult.rows[0].id;
-
-    await pool.query(
-      `
-      INSERT INTO telegram_users (
-        user_id,
-        telegram_id,
-        username,
-        first_name,
-        last_name,
-        photo_url,
-        auth_date
-      )
-      VALUES ($1,$2,$3,$4,$5,$6,$7)
-      `,
-      [
-        userId,
-        telegramId,
-        data.username || null,
-        data.first_name || null,
-        data.last_name || null,
-        data.photo_url || null,
-        data.auth_date
-      ]
-    );
+    await client.query('COMMIT');
 
     res.json({
       ok: true,
       user_id: userId,
-      telegram: true,
-      created: true
+      telegram_id,
     });
-
   } catch (err) {
-    console.error('[telegram auth] failed:', err);
-    res.status(500).json({ error: 'internal error' });
+    await client.query('ROLLBACK');
+    console.error('[telegram-auth]', err);
+    res.status(500).json({ error: 'Internal error' });
+  } finally {
+    client.release();
   }
 });
 

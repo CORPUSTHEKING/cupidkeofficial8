@@ -1,33 +1,31 @@
 'use strict';
 
 const express = require('express');
-const sql = require('mssql');
-
 const router = express.Router();
+const pool = require('../db');
 
-/*
- * GET /chat/messages/:sender_id/:receiver_id
- * Returns all messages exchanged between two users
+/**
+ * GET chat messages between two users
  */
 router.get('/messages/:sender_id/:receiver_id', async (req, res) => {
-  const senderId = req.params.sender_id;
-  const receiverId = req.params.receiver_id;
+  const { sender_id, receiver_id } = req.params;
 
   try {
-    const result = await sql.query`
+    const result = await pool.query(
+      `
       SELECT *
-      FROM Messages
-      WHERE
-        (sender_id = ${senderId} AND receiver_id = ${receiverId})
-        OR
-        (sender_id = ${receiverId} AND receiver_id = ${senderId})
+      FROM messages
+      WHERE (sender_id = $1 AND receiver_id = $2)
+         OR (sender_id = $2 AND receiver_id = $1)
       ORDER BY timestamp DESC
-    `;
+      `,
+      [sender_id, receiver_id]
+    );
 
-    res.json(result.recordset);
+    res.json(result.rows);
   } catch (err) {
-    console.error('[chat] db error:', err);
-    res.status(500).json({ error: 'Internal server error' });
+    console.error('[chat] query failed:', err);
+    res.status(500).json({ error: 'internal server error' });
   }
 });
 

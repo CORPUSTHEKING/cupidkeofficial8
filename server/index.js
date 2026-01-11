@@ -29,3 +29,8 @@ server.listen(port, () => {
 
 // Telegram Mini App authentication
 app.use('/auth', require('./routes/auth.telegram'));
+
+// Telegram auth
+const telegramAuthRouter = require('./routes/auth.telegram');
+app.use('/auth', telegramAuthRouter);
+
