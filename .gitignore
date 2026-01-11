@@ -1,6 +1,17 @@
 .DS_Store
-/server/images/*
-!*server/images/default_profilepic.jpeg
-pgdata
+
+# dependencies
 node_modules
+
+# builds
 client/build
+
+# postgres data
+pgdata
+
+# environment secrets
+.env
+
+# server images (except default)
+server/images/*
+!server/images/default_profilepic.jpeg
