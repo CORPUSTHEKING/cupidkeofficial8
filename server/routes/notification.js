@@ -1,29 +1,65 @@
 'use strict';
 
 const express = require('express');
-const sql = require('mssql');
-
 const router = express.Router();
+const pool = require('../db');
 
-/*
- * GET /notification/sender/:sender_id
- * Returns notifications created by a given sender
+/**
+ * Get notifications for a user
  */
-router.get('/sender/:sender_id', async (req, res) => {
-  const senderId = req.params.sender_id;
+router.get('/:user_id', async (req, res) => {
+  const user_id = Number(req.params.user_id);
 
   try {
-    const result = await sql.query`
-      SELECT *
-      FROM Notifications
-      WHERE sender_id = ${senderId}
-      ORDER BY timestamp DESC
-    `;
+    const result = await pool.query(
+      `
+      SELECT
+        notification_id,
+        user_id,
+        sender_id,
+        notification_text,
+        redirect_path,
+        read,
+        time_stamp
+      FROM notifications
+      WHERE user_id = $1
+      ORDER BY time_stamp DESC
+      `,
+      [user_id]
+    );
 
-    res.json(result.recordset);
+    res.json(result.rows);
   } catch (err) {
-    console.error('[notification] db error:', err);
-    res.status(500).json({ error: 'Internal server error' });
+    console.error('[notification] query failed:', err);
+    res.status(500).json({ error: 'internal server error' });
+  }
+});
+
+/**
+ * Mark notification as read
+ */
+router.post('/:id/read', async (req, res) => {
+  const id = Number(req.params.id);
+
+  try {
+    const result = await pool.query(
+      `
+      UPDATE notifications
+      SET read = 'YES'
+      WHERE notification_id = $1
+      RETURNING notification_id
+      `,
+      [id]
+    );
+
+    if (result.rowCount === 0) {
+      return res.status(404).json({ error: 'notification not found' });
+    }
+
+    res.json({ ok: true });
+  } catch (err) {
+    console.error('[notification] update failed:', err);
+    res.status(500).json({ error: 'internal server error' });
   }
 });
 
